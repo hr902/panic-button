@@ -1,5 +1,6 @@
 import logging
 import os
+from threading import Thread
 
 from dotenv import load_dotenv
 from flask import Flask, Response, request
@@ -33,6 +34,28 @@ handler = SlackRequestHandler(slack_app)
 web_app = Flask(__name__)
 
 
+def send_alert_message(client, user_id: str, command_text: str) -> None:
+    alert_text = f":rotating_light: ALERTA: <@{user_id}> activo el boton de panico."
+    if command_text:
+        alert_text += f" Detalle: {command_text}"
+
+    try:
+        response = client.chat_postMessage(
+            channel=ALERT_CHANNEL,
+            text=alert_text,
+        )
+        logger.info(
+            "Alert message sent successfully. ts=%s destination=%s",
+            response.get("ts"),
+            ALERT_CHANNEL,
+        )
+    except SlackApiError as exc:
+        error_code = exc.response.get("error", "unknown_error")
+        logger.exception("Slack rejected chat_postMessage with error=%s", error_code)
+    except Exception:
+        logger.exception("Unexpected error while sending alert message")
+
+
 @slack_app.command("/panic")
 def panic_command(ack, body, client, logger):
     user_id = body.get("user_id", "unknown-user")
@@ -52,23 +75,11 @@ def panic_command(ack, body, client, logger):
             response_type="ephemeral",
             text="Alerta recibida. Estamos contigo.",
         )
-
-        alert_text = f":rotating_light: ALERTA: <@{user_id}> activo el boton de panico."
-        if command_text:
-            alert_text += f" Detalle: {command_text}"
-
-        response = client.chat_postMessage(
-            channel=ALERT_CHANNEL,
-            text=alert_text,
-        )
-        logger.info(
-            "Alert message sent successfully. ts=%s destination=%s",
-            response.get("ts"),
-            ALERT_CHANNEL,
-        )
-    except SlackApiError as exc:
-        error_code = exc.response.get("error", "unknown_error")
-        logger.exception("Slack rejected chat_postMessage with error=%s", error_code)
+        Thread(
+            target=send_alert_message,
+            args=(client, user_id, command_text),
+            daemon=True,
+        ).start()
     except Exception:
         logger.exception("Unexpected error while processing /panic")
 
