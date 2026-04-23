@@ -47,13 +47,16 @@ def panic_command(ack, body, client, logger):
         channel_id,
         command_text or "<empty>",
     )
-    ack("Alerta recibida. Estamos contigo.")
-
-    alert_text = f":rotating_light: ALERTA: <@{user_id}> activo el boton de panico."
-    if command_text:
-        alert_text += f" Detalle: {command_text}"
-
     try:
+        ack(
+            response_type="ephemeral",
+            text="Alerta recibida. Estamos contigo.",
+        )
+
+        alert_text = f":rotating_light: ALERTA: <@{user_id}> activo el boton de panico."
+        if command_text:
+            alert_text += f" Detalle: {command_text}"
+
         response = client.chat_postMessage(
             channel=ALERT_CHANNEL,
             text=alert_text,
@@ -66,6 +69,13 @@ def panic_command(ack, body, client, logger):
     except SlackApiError as exc:
         error_code = exc.response.get("error", "unknown_error")
         logger.exception("Slack rejected chat_postMessage with error=%s", error_code)
+    except Exception:
+        logger.exception("Unexpected error while processing /panic")
+
+
+@slack_app.error
+def handle_slack_error(error, body, logger):
+    logger.exception("Unhandled Slack Bolt error. body=%s error=%s", body, error)
 
 
 @web_app.get("/")
@@ -75,7 +85,11 @@ def healthcheck():
 
 @web_app.post("/slack/events")
 def slack_events():
-    return handler.handle(request)
+    try:
+        return handler.handle(request)
+    except Exception:
+        logger.exception("HTTP error while handling Slack request")
+        return Response("Internal error", status=500)
 
 
 @web_app.get("/slack/events")
