@@ -34,13 +34,13 @@ handler = SlackRequestHandler(slack_app)
 web_app = Flask(__name__)
 
 
-def send_alert_message(client, user_id: str, command_text: str) -> None:
+def send_alert_message(user_id: str, command_text: str) -> None:
     alert_text = f":rotating_light: ALERTA: <@{user_id}> activo el boton de panico."
     if command_text:
         alert_text += f" Detalle: {command_text}"
 
     try:
-        response = client.chat_postMessage(
+        response = slack_app.client.chat_postMessage(
             channel=ALERT_CHANNEL,
             text=alert_text,
         )
@@ -70,18 +70,16 @@ def panic_command(ack, body, client, logger):
         channel_id,
         command_text or "<empty>",
     )
+    ack("Alerta recibida. Estamos contigo.")
+
     try:
-        ack(
-            response_type="ephemeral",
-            text="Alerta recibida. Estamos contigo.",
-        )
         Thread(
             target=send_alert_message,
-            args=(client, user_id, command_text),
+            args=(user_id, command_text),
             daemon=True,
         ).start()
     except Exception:
-        logger.exception("Unexpected error while processing /panic")
+        logger.exception("Unexpected error while starting alert thread")
 
 
 @slack_app.error
