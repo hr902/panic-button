@@ -70,7 +70,7 @@ def panic_command(ack, body, client, logger):
         channel_id,
         command_text or "<empty>",
     )
-    ack("Alerta recibida. Estamos contigo.")
+    ack("Alerta recibida. Estamos contigo. :blue_heart:")
 
     try:
         Thread(
